@@ -1,0 +1,235 @@
+---
+title: "Solução Lista 04"
+author: |
+        | Nome: Julia Xavier
+        | E-mail: julia.xavier@aluno.ufabc.edu.br
+        | Nome: Lucca Ianaguivara Kisanucki
+        | E-mail: lucca.ianaguivara@aluno.ufabc.edu.br
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T,
+                      fig.align='center',
+                      cache=TRUE,
+                      out.width = "60%",
+                      out.heigth = "60%",
+                      warning=FALSE,
+                      message=FALSE)
+options(width =70)
+
+library(reticulate)
+use_python("C:/Users/lucca/AppData/Local/Programs/Python/Python39/python.exe")
+```
+
+## Exercício 01
+```{python}
+import pandas as pd
+import numpy as np
+import re
+from sklearn.linear_model import LassoCV
+from sklearn.linear_model import RidgeCV
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+```
+```{python}
+file_url = "https://drive.google.com/uc?export=download&id=1jiWcGsl_tbqK5F0ryUTq48kcDTKWTTuk"
+df = pd.read_csv(file_url)
+df.head()
+```
+```{python}
+selected_columns = ['Age', 'Overall', 'Potential',  'Wage', 'Special', 'Acceleration', 'Aggression', 'Agility',
+                    'Balance', 'Ball control', 'Composure', 'Crossing', 'Curve', 'Dribbling', 'Finishing',
+                    'Positioning', 'Stamina', 'Interceptions', 'Strength', 'Vision', 'Volleys', 'Jumping',
+                    'Penalties', 'Shot power', 'Sprint speed', 'Heading accuracy', 'Long passing', 'Short passing']
+
+df = df[selected_columns].copy()
+df.head()
+```
+```{python}
+df['Wage'] = df['Wage'].apply(lambda x: re.sub(r'\D', '', str(x)))
+```
+```{python}
+def trata_modificadores(valor):
+  if not isinstance(valor, str):
+    valor = str(valor)
+
+  if '-' in valor:
+    valor = valor.split('-')
+    valor = int(valor[0]) - int(valor[1])
+  elif '+' in valor:
+    valor = valor.split('+')
+    valor = int(valor[0]) + int(valor[1])
+
+  if not isinstance(valor, int):
+    valor = int(valor)
+  return valor
+```
+```{python}
+for column in tqdm(selected_columns):
+  df[column] = df.apply(lambda x: trata_modificadores(x[column]), axis=1)
+```
+```{python}
+df = df.astype(int)
+df = df.dropna()
+```
+```{python}
+X = df.drop('Wage', axis=1)
+y = df['Wage']
+```
+```{python}
+lasso = LassoCV(cv=10)
+lasso.fit(X, y)
+```
+```{python}
+melhor_lambda = lasso.alpha_
+melhor_lambda
+```
+```{python}
+lasso_final = LassoCV(cv=10, alphas=[melhor_lambda])
+lasso_final.fit(X, y)
+```
+```{python}
+coef = pd.Series(lasso_final.coef_, index=X.columns)
+coef
+```
+```{python}
+sel_var = coef[coef != 0].index.tolist()
+sel_var
+```
+```{python}
+df.info()
+```
+```{python}
+mse_values = []
+for alpha in lasso_final.alphas_:
+    lasso = LassoCV(cv=10, alphas=[alpha])
+    lasso.fit(X, y)
+    mse_values.append(np.mean(lasso.mse_path_, axis=0))
+
+mse_values
+```
+```{python}
+plt.figure(figsize=(10, 6))
+plt.plot(np.log10(lasso_final.alphas_), mse_values, ':')
+plt.axvline(np.log10(melhor_lambda), linestyle='--', color='r',
+            label='Melhor Lambda: {:.4f}'.format(np.log10(melhor_lambda)))
+plt.show()
+```
+
+## Exercício 02
+```{python}
+df_ridge = df.copy()
+df_ridge.head()
+```
+```{python}
+X = df.drop('Wage', axis=1)
+y = df['Wage']
+```
+```{python}
+ridge = RidgeCV(cv=10)
+ridge.fit(X, y)
+```
+```{python}
+melhor_alpha = ridge.alpha_
+melhor_alpha
+```
+```{python}
+ridge_final = RidgeCV(cv=10, alphas=[melhor_alpha])
+ridge_final.fit(X, y)
+```
+```{python}
+coef = pd.Series(ridge_final.coef_, index=X.columns)
+coef
+```
+```{python}
+sel_vars = coef[coef != 0].index.tolist()
+sel_vars
+```
+```{python}
+alphas = np.logspace(-4, 2, num=100)
+coef_path = []
+for alpha in alphas:
+    ridge = RidgeCV(cv=10, alphas=[alpha])
+    ridge.fit(X, y)
+    coef_path.append(ridge.coef_)
+    
+alphas
+```
+```{python}
+coef_path = np.array(coef_path)
+coef_path
+```
+```{python}
+plt.clf()
+plt.figure(figsize=(10, 6))
+plt.plot(np.log10(alphas), coef_path)
+plt.show()
+```
+
+## Exercício 03
+```{python}
+import numpy as np
+import statsmodels.api as sm
+
+data = sm.datasets.get_rdataset('mtcars').data
+data
+```
+
+```{python}
+X = data.drop(columns=['mpg'])
+y = data['mpg']
+```
+
+```{python}
+from sklearn.linear_model import ElasticNet
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=4)
+
+enet = ElasticNet(alpha=0.5, l1_ratio=0.5)
+
+enet.fit(X_train, y_train)
+
+y_pred = enet.predict(X_test)
+
+mse = mean_squared_error(y_test, y_pred)
+print("Mean Squared Error:", mse)
+```
+
+## Exercício 04
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+
+np.random.seed(0)
+X = np.linspace(-1, 1, 100)
+Y = 2*X**3 + X + 10 + np.random.normal(0, 0.3, 100)
+```
+
+```{python}
+graus = range(1, 6)
+```
+
+```{python}
+erros = []
+for grau in graus:
+    coeffs = np.polyfit(X, Y, grau)
+    poly_fit = np.poly1d(coeffs)
+    predicted_values = poly_fit(X)
+    erro = np.mean((predicted_values - Y)**2)
+    erros.append(erro)
+```
+
+```{python}
+plt.clf()
+plt.figure(figsize=(10, 6))
+plt.plot(graus, erros, marker='o')
+plt.xlabel('Grau Polinomial')
+plt.ylabel('Erro Quadratico Medio')
+plt.title('Erro Quadratico Medio vs Grau Polinomial')
+plt.grid(True)
+plt.show()
+```
